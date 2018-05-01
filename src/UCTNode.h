@@ -21,83 +21,99 @@
 
 #include "config.h"
 
-#include <tuple>
 #include <atomic>
-#include <limits>
+#include <memory>
+#include <vector>
 
-#include "SMP.h"
 #include "GameState.h"
 #include "Network.h"
+#include "SMP.h"
 
 class UCTNode {
 public:
-    using sortnode_t = std::tuple<float, int, float, UCTNode*>;
-
     // When we visit a node, add this amount of virtual losses
     // to it to encourage other CPUs to explore other parts of the
     // search tree.
     static constexpr auto VIRTUAL_LOSS_COUNT = 3;
 
+    using node_ptr_t = std::unique_ptr<UCTNode>;
+
+    // Defined in UCTNode.cpp
     explicit UCTNode(int vertex, float score);
-    ~UCTNode();
+    UCTNode() = delete;
+    ~UCTNode() = default;
+
+    bool create_children(std::atomic<int>& nodecount,
+                         GameState& state, float& eval,
+                         float mem_full = 0.0f);
+
+    const std::vector<node_ptr_t>& get_children() const;
+    void sort_children(int color);
+    UCTNode& get_best_root_child(int color);
+    UCTNode* uct_select_child(int color, bool is_root);
+
+    size_t count_nodes() const;
+    SMP::Mutex& get_mutex();
     bool first_visit() const;
     bool has_children() const;
-    bool create_children(std::atomic<int> & nodecount,
-                         GameState & state, float & eval);
-    void kill_superkos(KoState & state);
-    void delete_child(UCTNode * child);
     void invalidate();
+    void set_active(const bool active);
     bool valid() const;
+    bool active() const;
     int get_move() const;
     int get_visits() const;
     float get_score() const;
     void set_score(float score);
     float get_eval(int tomove) const;
-    double get_blackevals() const;
-    void set_visits(int visits);
-    void set_blackevals(double blacevals);
-    void set_eval(float eval);
-    void accumulate_eval(float eval);
+    float get_net_eval(int tomove) const;
     void virtual_loss(void);
     void virtual_loss_undo(void);
+    void update(float eval);
+
+    // Defined in UCTNodeRoot.cpp, only to be called on m_root in UCTSearch
+    void kill_superkos(const KoState& state);
     void dirichlet_noise(float epsilon, float alpha);
     void randomize_first_proportionally();
-    void update(float eval = std::numeric_limits<float>::quiet_NaN());
 
-    UCTNode* uct_select_child(int color);
     UCTNode* get_first_child() const;
-    UCTNode* get_pass_child() const;
     UCTNode* get_nopass_child(FastState& state) const;
-    UCTNode* get_sibling() const;
-
-    void sort_root_children(int color);
-    void sort_children();
-    SMP::Mutex & get_mutex();
+    node_ptr_t find_child(const int move);
 
 private:
-    UCTNode();
-    void link_child(UCTNode * newchild);
-    void link_nodelist(std::atomic<int> & nodecount,
-                       std::vector<Network::scored_node> & nodelist);
+    enum Status : char {
+        INVALID, // superko
+        PRUNED,
+        ACTIVE
+    };
+    void link_nodelist(std::atomic<int>& nodecount,
+                       std::vector<Network::scored_node>& nodelist,
+                       float mem_full);
+    double get_blackevals() const;
+    void accumulate_eval(float eval);
 
-    // Tree data
-    std::atomic<bool> m_has_children{false};
-    UCTNode* m_firstchild{nullptr};
-    UCTNode* m_nextsibling{nullptr};
+    // Note : This class is very size-sensitive as we are going to create
+    // tens of millions of instances of these.  Please put extra caution
+    // if you want to add/remove/reorder any variables here.
+
     // Move
-    int m_move;
+    std::int16_t m_move;
     // UCT
+    std::atomic<std::int16_t> m_virtual_loss{0};
     std::atomic<int> m_visits{0};
-    std::atomic<int> m_virtual_loss{0};
     // UCT eval
     float m_score;
-    std::atomic<double> m_blackevals{0};
-    // node alive (not superko)
-    std::atomic<bool> m_valid{true};
+    // Original net eval for this node (not children).
+    float m_net_eval{0.0f};
+    std::atomic<double> m_blackevals{0.0};
+    std::atomic<Status> m_status{ACTIVE};
     // Is someone adding scores to this node?
     // We don't need to unset this.
     bool m_is_expanding{false};
     SMP::Mutex m_nodemutex;
+
+    // Tree data
+    std::atomic<bool> m_has_children{false};
+    std::vector<node_ptr_t> m_children;
 };
 
 #endif

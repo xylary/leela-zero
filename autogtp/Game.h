@@ -20,14 +20,15 @@
 #define GAME_H
 
 #include <QProcess>
-#include <QTextStream>
 #include <tuple>
 
-using VersionTuple = std::tuple<int, int>;
+using VersionTuple = std::tuple<int, int, int>;
 
 class Game : QProcess {
 public:
-    Game(const QString& weights, QTextStream& out);
+    Game(const QString& weights,
+         const QString& opt,
+         const QString& binary = QString("./leelaz"));
     ~Game() = default;
     bool gameStart(const VersionTuple& min_version);
     void move();
@@ -35,9 +36,29 @@ public:
     bool readMove();
     bool nextMove();
     bool getScore();
+    bool loadSgf(const QString &fileName);
     bool writeSgf();
+    bool loadTraining(const QString &fileName);
+    bool saveTraining();
+    bool fixSgf(QString& weightFile, bool resignation);
     bool dumpTraining();
+    QString getCmdLine() const { return m_cmdLine; }
+    bool dumpDebug();
     void gameQuit();
+    QString getMove() const { return m_moveDone; }
+    QString getFile() const { return m_fileName; }
+    bool setMove(const QString& m);
+    bool checkGameEnd();
+    void setCmdLine(const QString& cmd)  { m_cmdLine = cmd; }
+    int getWinner();
+    QString getWinnerName() const { return m_winner; }
+    int getMovesCount() const { return m_moveNum; }
+    void setMovesCount(int moves);
+    QString getResult() const { return m_result.trimmed(); }
+    enum {
+        BLACK = 0,
+        WHITE = 1,
+    };
 
 private:
     enum {
@@ -46,17 +67,18 @@ private:
         WRONG_GTP,
         LAUNCH_FAILURE
     };
-
-    QTextStream& output;
-    QString cmdLine;
-    QString timeSettings;
-    QString winner;
-    QString fileName;
-    bool resignation;
-    bool blackToMove;
-    bool blackResigned;
-    int passes;
-    int moveNum;
+    QString m_cmdLine;
+    QString m_binary;
+    QString m_timeSettings;
+    QString m_winner;
+    QString m_fileName;
+    QString m_moveDone;
+    QString m_result;
+    bool m_resignation;
+    bool m_blackToMove;
+    bool m_blackResigned;
+    int m_passes;
+    int m_moveNum;
     bool sendGtpCommand(QString cmd);
     void checkVersion(const VersionTuple &min_version);
     bool waitReady();

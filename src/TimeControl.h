@@ -20,6 +20,8 @@
 #define TIMECONTROL_H_INCLUDED
 
 #include <array>
+
+#include "config.h"
 #include "Timing.h"
 
 class TimeControl {
@@ -27,7 +29,7 @@ public:
     /*
         Initialize time control. Timing info is per GTP and in centiseconds
     */
-    TimeControl(int boardsize = 19,
+    TimeControl(int boardsize = BOARD_SIZE,
                 int maintime = 60 * 60 * 100,
                 int byotime = 0, int byostones = 25,
                 int byoperiods = 0);
@@ -38,10 +40,12 @@ public:
     void adjust_time(int color, int time, int stones);
     void set_boardsize(int boardsize);
     void display_times();
-    int get_remaining_time(int color);
     void reset_clocks();
+    std::string to_text_sgf();
 
 private:
+    void display_color_time(int color);
+
     int m_maintime;
     int m_byotime;
     int m_byostones;
